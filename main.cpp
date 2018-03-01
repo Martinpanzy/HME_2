@@ -1,4 +1,9 @@
+#include "MD2.h"
 #include "mbed.h"
+
+#define SHA2_256_H
+#include "HashAlgorithm.h"
+#include "SHA2_32.h"
 
 //Photointerrupter input pins
 #define I1pin D2
@@ -98,7 +103,7 @@ void isr(){
     int8_t orState = 0;    //Rotot offset at motor state 0
     int8_t intState = 0;
     int8_t intStateOld = 0;
-
+    //Poll the rotor state and set the motor outputs accordingly to spin the motor
     while (1) {
         intState = readRotorState();
         if (intState != intStateOld) {
@@ -110,19 +115,38 @@ void isr(){
     
 //Main
 int main() {
-
-    
     //Initialise the serial port
     Serial pc(SERIAL_TX, SERIAL_RX);
     pc.printf("Hello\n\r");
     
-    //Run the motor synchronisation
-
-    //orState is subtracted from future rotor state inputs to align rotor and motor states
+    
+    uint8_t sequence[] = {0x45,0x6D,0x62,0x65,0x64,0x64,0x65,0x64,
+                      0x20,0x53,0x79,0x73,0x74,0x65,0x6D,0x73,
+                      0x20,0x61,0x72,0x65,0x20,0x66,0x75,0x6E,
+                      0x20,0x61,0x6E,0x64,0x20,0x64,0x6F,0x20,
+                      0x61,0x77,0x65,0x73,0x6F,0x6D,0x65,0x20,
+                      0x74,0x68,0x69,0x6E,0x67,0x73,0x21,0x20,
+                      0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+                      0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+    uint64_t* key = (uint64_t*)((int)sequence + 48);
+    uint64_t* nonce = (uint64_t*)((int)sequence + 56);
+    uint8_t hash[32];
+//    pc.printf("* key = %llu\n", * key);
+//    pc.printf("* nonce = %llu\n", * nonce);
+    uint8_t *data;
+    data = sequence;
+    uint8_t *phash;
+    phash = hash;
+    MD2::computeHash(hash, sequence, 32);
+    
+    
+//     //Run the motor synchronisation
+//orState = motorHome();
+//pc.printf("Rotor origin: %x\n\r",orState);
+//     //orState is subtracted from future rotor state inputs to align rotor and motor states
     
     //isr triggered at the rising edge of I1
     I1.rise(&isr);
-    //Poll the rotor state and set the motor outputs accordingly to spin the motor
 
 }
 
