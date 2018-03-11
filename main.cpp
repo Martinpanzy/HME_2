@@ -1,4 +1,6 @@
 #include "mbed.h"
+#include "Crypto_light.h"
+
 
 //Photointerrupter input pins
 #define I1pin D2
@@ -93,7 +95,6 @@ int8_t motorHome() {
     return readRotorState();
 }
 
-//Interrupt servise routine, read the motor state and control the motor field
 void isr(){        
     int8_t orState = 0;    //Rotot offset at motor state 0
     int8_t intState = 0;
@@ -108,6 +109,50 @@ void isr(){
     }
 }
     
+void mining(){
+    uint8_t sequence[] = {0x45,0x6D,0x62,0x65,0x64,0x64,0x65,0x64,
+    0x20,0x53,0x79,0x73,0x74,0x65,0x6D,0x73,
+    0x20,0x61,0x72,0x65,0x20,0x66,0x75,0x6E,
+    0x20,0x61,0x6E,0x64,0x20,0x64,0x6F,0x20,
+    0x61,0x77,0x65,0x73,0x6F,0x6D,0x65,0x20,
+    0x74,0x68,0x69,0x6E,0x67,0x73,0x21,0x20,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+    uint64_t* key = (uint64_t*)((int)sequence + 48);           
+    uint64_t* nonce = (uint64_t*)((int)sequence + 56); 
+    uint8_t hash[32];
+
+    uint8_t *ptoseq;
+    ptoseq=sequence;
+
+    uint8_t *ptohash;
+    ptohash=hash;
+
+    for((*nonce)=0;(*nonce)<0xFFFFFFFFFFFFFFFF; (*nonce)++){
+        SHA256::computeHash(ptohash, ptoseq, uint32_t(64));
+
+//        printf("seq: ");
+//        for(int i = 0; i < 64; ++i){
+//            printf("%02x", sequence[i]);
+//           
+//        }   
+//        printf("\n");
+        
+        if(hash[0]==0x00 && hash[1]==0x00){
+            printf("hash: ");
+            for(int i = 0; i < 32; ++i){
+                printf("%02x", hash[i]);
+            }   
+            printf("\n");
+        }
+    }
+}
+
+
+ 
+static const char msg[] = "mbed is great !";
+ 
+    
 //Main
 int main() {
 
@@ -115,15 +160,19 @@ int main() {
     //Initialise the serial port
     Serial pc(SERIAL_TX, SERIAL_RX);
     pc.printf("Hello\n\r");
-    
     //Run the motor synchronisation
+
 
     //orState is subtracted from future rotor state inputs to align rotor and motor states
     
-    //isr triggered at the rising edge of I1
     I1.rise(&isr);
+    
+    
+    mining();
+
+    return 0;
+    
     //Poll the rotor state and set the motor outputs accordingly to spin the motor
 
 }
-
 
