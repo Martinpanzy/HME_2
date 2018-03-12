@@ -143,7 +143,7 @@ void mining(){
             for(int i = 0; i < 32; ++i){
                 printf("%02x", hash[i]);
             }   
-            printf("\n");
+            printf("\n\r");
         }
     }
 }
