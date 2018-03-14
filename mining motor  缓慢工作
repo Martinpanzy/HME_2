@@ -95,32 +95,21 @@ int8_t motorHome() {
     return readRotorState();
 }
 
+int8_t intState = 0;
+
+
 void isr(){        
     int8_t orState = 0;    //Rotot offset at motor state 0
-    int8_t intState = 0;
-    int8_t intStateOld = 0;
-
-    while (1) {
-        intState = readRotorState();
-        if (intState != intStateOld) {
-            intStateOld = intState;
-            motorOut((intState-orState+lead+6)%6); //+6 to make sure the remainder is positive
-        }
-    }
+    intState = readRotorState();
+    motorOut((intState-orState+lead+6)%6); //+6 to make sure the remainder is positive
 }
  
  
+
 Ticker OneSecondStuff;
-
-
 int count=0;
-
-
-
-
 void OneSecondFunction() 
 {
-    
     printf(" computation rate (h/s) :");
     printf("%d\n\r", count);
     count=0;
@@ -155,7 +144,6 @@ void mining(){
                 printf("%02x", hash[i]);
             }   
             printf("\n\r");
-            
         }
     }
 }
@@ -179,12 +167,15 @@ int main() {
     //orState is subtracted from future rotor state inputs to align rotor and motor states
     
    
-OneSecondStuff.attach( &OneSecondFunction, 1.0 ) ;
+    OneSecondStuff.attach( &OneSecondFunction, 1.0 ) ;
    
-   for(;;) 
-    {   
-        I1.rise(&isr);
-        mining();
+    I1.rise(&isr);
+    I2.rise(&isr);
+    I3.rise(&isr);
+   
+   
+   while(1) {   
+          mining();
     }
 
     return 0;
