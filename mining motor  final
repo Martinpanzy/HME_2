@@ -172,7 +172,9 @@ int main() {
     I1.rise(&isr);
     I2.rise(&isr);
     I3.rise(&isr);
-   
+    I1.fall(&isr);
+    I2.fall(&isr);
+    I3.fall(&isr);
    
    while(1) {   
           mining();
@@ -183,3 +185,4 @@ int main() {
     //Poll the rotor state and set the motor outputs accordingly to spin the motor
 
 }
+
