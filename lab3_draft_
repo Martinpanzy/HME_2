@@ -217,7 +217,7 @@ void motorOut(int8_t driveState,uint32_t Torque){                               
 //Basic synchronisation routine    
 int8_t motorHome() {
     //Put the motor in drive state 0 and wait for it to stabilise
-    motorOut(0,2000);
+    motorOut(0, Torque);
     
     wait(2.0);
     
