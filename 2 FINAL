@@ -129,8 +129,8 @@ void decodeFn(){
                                              newKey_mutex.lock();
                                              sscanf(newCmd, "K%x", &newKey);   //Decode the command
                                               newKey_mutex.unlock();
-                                             //printf("The_Value_of_newkey_%d\n\r  ", newKey);
-                                             // printf("0x%016x\n\r",newKey);
+                                           //  printf("The_Value_of_newkey_%d\n\r  ", newKey);
+                                            // printf("0x%x\n\r",newKey);
                                          }
                                     }
                         }
@@ -203,7 +203,7 @@ void OneSecondFunction()
 {
    // printf(" computation rate (h/s) :");        ////not allowed to use printf in an interrupt when using RTOS
    // printf("%d\n\r", count);
-   putMessage(3,count );
+    putMessage(3,count );
     count=0;
     
 }
@@ -242,16 +242,12 @@ void mining(){
            
            printf("\n\r");
            putMessage(1,*nonce);
-           putMessage(2, newKey);
+           putMessage(2, *key);
         }  
     }
 }
 
 
- 
-static const char msg[] = "mbed is great !";
-
- 
     
 //Main
 int main() {
@@ -279,4 +275,3 @@ int main() {
     //Poll the rotor state and set the motor outputs accordingly to spin the motor
 
 }
-
