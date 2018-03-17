@@ -200,11 +200,11 @@ void motorOut(int8_t driveState,uint32_t Torque){                               
     if (~driveOut & 0x20) L3H = 1;
     
     //Then turn on
-    if (driveOut & 0x01) L1L=0;                 //.pulsewidth_us(2000);
+    if (driveOut & 0x01) L1L.pulsewidth_us(Torque);                 //.pulsewidth_us();
     if (driveOut & 0x02) L1H = 0;
-    if (driveOut & 0x04) L2L=0; //.pulsewidth_us(2000);
+    if (driveOut & 0x04) L2L.pulsewidth_us(Torque);                 //.pulsewidth_us();
     if (driveOut & 0x08) L2H = 0;
-    if (driveOut & 0x10) L3L=0; //.pulsewidth_us(2000);
+    if (driveOut & 0x10) L3L.pulsewidth_us(Torque);                 //.pulsewidth_us();
     if (driveOut & 0x20) L3H = 0;
 }
     
