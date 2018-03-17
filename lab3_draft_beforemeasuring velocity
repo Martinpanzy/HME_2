@@ -65,6 +65,7 @@ DigitalOut L3H(L3Hpin);
 
 Thread commOutT;                        //define two threads
 Thread  ReadCom;
+Thread motorCtrlT(osPriorityNormal,1024); //Create a new thread，specify the priority of the thread and the maximum stack size.
 Mutex newKey_mutex;                         //mutex prevents simultaneous access of newKey by the command decoder and the bitcoin miner.
 
 RawSerial pc(SERIAL_TX, SERIAL_RX);           //Initialise the serial port
@@ -108,8 +109,27 @@ void serialISR(){                                            //get command from 
 
 char newCmd[34];            //define an array to store Char and make string to recover command
 
+void motorCtrlTick(){ 
+        motorCtrlT.signal_set(0x1); 
+}
 
-
+int32_t motorPosition; 
+void motorCtrlFn(){
+     Ticker motorCtrlTicker;
+     motorCtrlTicker.attach_us(&motorCtrlTick,100000); 
+     int count_iteration=0;
+     while(1){
+         int MortorP0=motorPosition;
+         motorCtrlT.signal_wait(0x1);
+         int MortorP1=motorPosition;
+         uint32_t Velocity=(MortorP1-MortorP0)*10;
+         count_iteration= count_iteration+1;
+         if(count_iteration ==10){
+             putMessage(10000000, Velocity );
+         }
+         
+     }
+}
 void decodeFn(){
             
             buf_index=-1;
@@ -208,13 +228,17 @@ int8_t motorHome() {
 int8_t intState = 0;
 
 
-void isr(){                //interrput for motor,
+void motorISR() {                        //interrput for motor,
+    static int8_t oldRotorState;
     int8_t orState = 0;    //Rotot offset at motor state 0
-    intState = readRotorState();
-    motorOut((intState-orState+lead+6)%6, newTorque); //+6 to make sure the remainder is positive
+    int8_t rotorState = readRotorState(); 
+    motorOut((rotorState-orState+lead+6)%6, newTorque);            //+6 to make sure the remainder is positive
+    if (rotorState - oldRotorState == 5) motorPosition--;
+    else if (rotorState - oldRotorState == -5) motorPosition++; 
+    else motorPosition += (rotorState - oldRotorState); 
+    oldRotorState = rotorState;
 }
- 
- 
+
 
 Ticker OneSecondStuff;
 int count=0;
@@ -272,12 +296,12 @@ int main() {
 
     pc.printf("Hello\n\r");
     //OneSecondStuff.attach( &OneSecondFunction, 1.0 ) ;        //not allowed to use printf in an interrupt when using RTOS
-    I1.rise(&isr);
-    I2.rise(&isr);
-    I3.rise(&isr);
-    I1.fall(&isr);
-    I2.fall(&isr);
-    I3.fall(&isr);
+    I1.rise(&motorISR);
+    I2.rise(&motorISR);
+    I3.rise(&motorISR);
+    I1.fall(&motorISR);
+    I2.fall(&motorISR);
+    I3.fall(&motorISR);
     
     
     L1L.period_us(2000);          
@@ -288,17 +312,18 @@ int main() {
     L3L.write(0.4);
     
     
-    commOutT.start(commOutFn);       // start two threads
+    commOutT.start(commOutFn);       // start three threads
     ReadCom.start(decodeFn);
+    motorCtrlT.start(motorCtrlFn);
+   
    
    while(1) {   
           mining();
-          
-    }
+     }
 
     return 0;
     
-    //Poll the rotor state and set the motor outputs accordingly to spin the motor
+   
 
 }
 
