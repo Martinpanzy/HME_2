@@ -1,0 +1,304 @@
+#include "mbed.h"
+#include "SHA256.h"
+#include "rtos.h"
+
+
+
+
+//Photointerrupter input pins
+#define I1pin D2
+#define I2pin D11
+#define I3pin D12
+
+//Incremental encoder input pins
+#define CHA   D7
+#define CHB   D8  
+
+//Motor Drive output pins   //Mask in output byte
+#define L1Lpin D4           //0x01
+#define L1Hpin D5           //0x02
+#define L2Lpin D3           //0x04
+#define L2Hpin D6           //0x08
+#define L3Lpin D9           //0x10
+#define L3Hpin D10          //0x20
+
+//Mapping from sequential drive states to motor phase outputs
+/*
+State   L1  L2  L3
+0       H   -   L
+1       -   H   L
+2       L   H   -
+3       L   -   H
+4       -   L   H
+5       H   L   -
+6       -   -   -
+7       -   -   -
+*/
+//Drive state to output table
+const int8_t driveTable[] = {0x12,0x18,0x09,0x21,0x24,0x06,0x00,0x00};
+
+//Mapping from interrupter inputs to sequential rotor states. 0x00 and 0x07 are not valid
+const int8_t stateMap[] = {0x07,0x05,0x03,0x04,0x01,0x00,0x02,0x07};  
+//const int8_t stateMap[] = {0x07,0x01,0x03,0x02,0x05,0x00,0x04,0x07}; //Alternative if phase order of input or drive is reversed
+
+//Phase lead to make motor spin
+const int8_t lead = 2;  //2 for forwards, -2 for backwards
+
+//Status LED
+DigitalOut led1(LED1);
+
+//Photointerrupter inputs
+InterruptIn I1(I1pin);
+InterruptIn I2(I2pin);
+InterruptIn I3(I3pin);
+
+//Motor Drive outputs
+
+PwmOut L1L(L1Lpin);                      //only the low side of driver is controlled by PWM
+DigitalOut L1H(L1Hpin);
+PwmOut L2L(L2Lpin);
+DigitalOut L2H(L2Hpin);
+PwmOut L3L(L3Lpin);
+DigitalOut L3H(L3Hpin);
+
+
+
+Thread commOutT;                        //define two threads
+Thread  ReadCom;
+Mutex newKey_mutex;                         //mutex prevents simultaneous access of newKey by the command decoder and the bitcoin miner.
+
+RawSerial pc(SERIAL_TX, SERIAL_RX);           //Initialise the serial port
+
+
+typedef struct{ uint8_t code;
+                uint32_t data; 
+               } message_t ;                                //DEFINE a new data structure
+
+Mail<message_t,16> outMessages;                               //creat a global instance to pass information between threads.(consist of 16 message_t)
+
+void putMessage(uint8_t code, uint32_t data){                 //a separate function to add messages to the queue. write each single message to outMessages.
+     message_t *pMessage = outMessages.alloc(); 
+     pMessage->code = code;
+     pMessage->data = data; 
+     outMessages.put(pMessage);
+}
+
+void commOutFn() {                                         //The function of the thread function commOutFn() is to take messages from the queue and print them on the serial port. 
+    while(1) {
+                osEvent newEvent = outMessages.get();
+                message_t *pMessage = (message_t*)newEvent.value.p; 
+                pc.printf("\r");
+                pc.printf("Message %d with data 0x%016x\n\r", pMessage->code,pMessage->data); 
+                outMessages.free(pMessage);           
+             }
+}
+
+Queue <void, 8> inCharQ;              //buffer for storing single Char when input command
+int buf_index=-1;                                 //index start from -1 so the first index is 0
+
+volatile uint64_t newKey;                         //which will be used to pass the key from the command decoder to the bitcoin miner.
+volatile uint32_t newTorque;
+
+void serialISR(){                                            //get command from pc, strore it to inCharQ
+                uint8_t newChar = pc.getc();
+                 pc.putc(newChar);               // show the command typed on the screen
+                inCharQ.put((void*)newChar); 
+                 buf_index=buf_index+1;           //for every input, the index +1 
+}
+
+char newCmd[34];            //define an array to store Char and make string to recover command
+
+
+
+void decodeFn(){
+            
+            buf_index=-1;
+            pc.attach(&serialISR);                               //get command from pc, strore it to inCharQ
+             while(1) {
+                         osEvent newEvent = inCharQ.get();       //wait for each new character
+                         uint8_t newChar = (uint8_t)newEvent.value.p;        //get char from buffer inCharQ to newChar
+                         
+                        if(buf_index<34){                            // 0-31, notice 'K' and '/r' also takes space,so dataMax=32
+                              newCmd[buf_index]= newChar;             //store the Char in the buffer to an array, prepare to make a string
+                                                                                                      //printf("%d\n\r",buf_index);
+                                    if(newChar=='\r'){                    //'\r' stands for end of input command
+                                          newCmd[buf_index]='\0';
+                                          printf("\n\r");
+                                          printf("newCmd_array_is_%s\n\r",newCmd );     //can print the string to check 
+                                          printf("\n\r");
+                                          buf_index=-1;                      // clear index
+                                               
+                                               
+                                          if (newCmd[0] == 'K'){                    //communicate between threads using newkey
+                                              newKey_mutex.lock();
+                                              sscanf(newCmd, "K%X",&newKey);   //Decode the command
+                                               newKey_mutex.unlock();
+                                             
+                                             printf("The_Value_of_newkey_0x%016x\n\r", newKey);
+                                         }
+                                         
+                                         
+                                          if (newCmd[0] == 'T'){                    //communicate between threads using newkey
+                                             
+                                             sscanf(newCmd, "T%X", &newTorque);   //Decode the command
+                                            
+                                             //printf("The_Value_of_newkey_%d\n\r  ", newKey1);
+                                             //printf("The_Value_of_newkey_0x%016x\n\r", newKey);
+                                         }
+                                         
+                                         
+                                         
+                                    }
+                        }
+                        
+                        else{                                                           //when overflow of buffer happends
+                               printf("\n\r");
+                               printf("the buffer to make a string is overflow");
+                               printf("\n\r");
+                               buf_index=-1; 
+                            }                         
+            }
+}
+            
+
+     
+
+
+//Set a given drive state
+void motorOut(int8_t driveState,uint32_t Torque){                                  // set the PWM in the function
+    
+    //Lookup the output byte from the drive state.
+    int8_t driveOut = driveTable[driveState & 0x07];           //Get the LSB 3 bits of drivestate
+    
+    //putMessage(55,Torque );
+    //Turn off first
+    if (~driveOut & 0x01) L1L.pulsewidth_us(0);                      //it specifies it as an absolute value in useconds.
+    if (~driveOut & 0x02) L1H = 1;
+    if (~driveOut & 0x04) L2L.pulsewidth_us(0);
+    if (~driveOut & 0x08) L2H = 1;
+    if (~driveOut & 0x10) L3L.pulsewidth_us(0);
+    if (~driveOut & 0x20) L3H = 1;
+    
+    //Then turn on
+    if (driveOut & 0x01) L1L=0;                 //.pulsewidth_us(2000);
+    if (driveOut & 0x02) L1H = 0;
+    if (driveOut & 0x04) L2L=0; //.pulsewidth_us(2000);
+    if (driveOut & 0x08) L2H = 0;
+    if (driveOut & 0x10) L3L=0; //.pulsewidth_us(2000);
+    if (driveOut & 0x20) L3H = 0;
+}
+    
+    //Convert photointerrupter inputs to a rotor state
+    inline int8_t readRotorState(){
+    return stateMap[I1 + 2*I2 + 4*I3];
+    
+    }
+
+//Basic synchronisation routine    
+int8_t motorHome() {
+    //Put the motor in drive state 0 and wait for it to stabilise
+    motorOut(0,2000);
+    
+    wait(2.0);
+    
+    //Get the rotor state
+     return readRotorState();
+}
+
+int8_t intState = 0;
+
+
+void isr(){                //interrput for motor,
+    int8_t orState = 0;    //Rotot offset at motor state 0
+    intState = readRotorState();
+    motorOut((intState-orState+lead+6)%6, newTorque); //+6 to make sure the remainder is positive
+}
+ 
+ 
+
+Ticker OneSecondStuff;
+int count=0;
+void OneSecondFunction() 
+{
+   // printf(" computation rate (h/s) :");        ////not allowed to use printf in an interrupt when using RTOS
+   // printf("%d\n\r", count);
+    putMessage(1,count );
+    count=0;
+    
+}
+
+    
+void mining(){
+    uint8_t sequence[] = {0x45,0x6D,0x62,0x65,0x64,0x64,0x65,0x64,
+    0x20,0x53,0x79,0x73,0x74,0x65,0x6D,0x73,
+    0x20,0x61,0x72,0x65,0x20,0x66,0x75,0x6E,
+    0x20,0x61,0x6E,0x64,0x20,0x64,0x6F,0x20,
+    0x61,0x77,0x65,0x73,0x6F,0x6D,0x65,0x20,
+    0x74,0x68,0x69,0x6E,0x67,0x73,0x21,0x20,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+    uint64_t* key = (uint64_t*)((int)sequence + 48);           
+    uint64_t* nonce = (uint64_t*)((int)sequence + 56); 
+    uint8_t hash[32];
+    
+    uint8_t *ptoseq;
+    ptoseq=sequence;
+    uint8_t *ptohash;
+    ptohash=hash;
+    
+    for((*nonce)=0;(*nonce)<0xFFFFFFFFFFFFFFFF; (*nonce)++){
+         newKey_mutex.lock();         //Make changes to the bitcoin miner to use the new key. Before every hash attempt, copy newKey into key.
+         * key = newKey;
+         newKey_mutex.unlock();
+        
+        SHA256::computeHash(ptohash, ptoseq, uint32_t(64));
+        count=count+1;
+        if(hash[0]==0x00 && hash[1]==0x00){
+            printf("hash: ");
+           for(int i = 0; i < 32; ++i){
+               printf("%02x", hash[i]);
+            }  
+           
+           printf("\n\r");
+           putMessage(3,*nonce);
+           putMessage(2, *key);
+        }  
+    }
+}
+
+    
+//Main
+int main() {
+
+    pc.printf("Hello\n\r");
+    //OneSecondStuff.attach( &OneSecondFunction, 1.0 ) ;        //not allowed to use printf in an interrupt when using RTOS
+    I1.rise(&isr);
+    I2.rise(&isr);
+    I3.rise(&isr);
+    I1.fall(&isr);
+    I2.fall(&isr);
+    I3.fall(&isr);
+    
+    
+    L1L.period_us(2000);          
+    L1L.write(0.4);     //Above 50% there is a non-linear relationship between duty cycle and motor speed.
+    L2L.period_us(2000);     
+    L2L.write(0.4);
+    L3L.period_us(2000);      
+    L3L.write(0.4);
+    
+    
+    commOutT.start(commOutFn);       // start two threads
+    ReadCom.start(decodeFn);
+   
+   while(1) {   
+          mining();
+          
+    }
+
+    return 0;
+    
+    //Poll the rotor state and set the motor outputs accordingly to spin the motor
+
+}
+
