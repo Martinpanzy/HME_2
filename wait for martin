@@ -226,9 +226,10 @@ void motorCtrlFn(){
         MortorP1 = motorPosition;
         int32_t Velocity = (MortorP1 - MortorP0)*10;
         MortorP0 = MortorP1;
-         
         count_iteration++;
+        printf("------------------------+1----------------------\n\r");
         if(count_iteration == 10){
+            printf("dfjjkgbadlksvdjnfksajnfksanfkjsdankjagjkladgjkabjklgadbjkadsjklgbads\n\r");
             putMessage(4, Velocity);
             putMessage(5, motorPosition);
             count_iteration = 0;
@@ -311,12 +312,11 @@ int main() {
     
     commOutT.start(commOutFn);
     ReadCom.start(decodeFn);
-   
-   while(1) {   
+    motorCtrlT.start(motorCtrlFn);
+    while(1) {   
           mining();
           
     }
-
     return 0;
     
     //Poll the rotor state and set the motor outputs accordingly to spin the motor
