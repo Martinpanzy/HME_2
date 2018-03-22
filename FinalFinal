@@ -100,6 +100,7 @@ int buf_index=-1;                                 //index start from -1 so the f
 volatile uint64_t newKey;                         //which will be used to pass the key from the command decoder to the bitcoin miner.
 volatile uint32_t newTorque;
 volatile uint32_t newVelocity;
+volatile uint32_t ctrlPosition;
 int8_t orState = 0;                  //Rotor offset at motor state 0
 
 
@@ -117,7 +118,9 @@ void motorCtrlTick(){
 }
 
 int32_t motorPosition; 
-int32_t ctrlTorque;
+int32_t ctrlTorque_s;
+int32_t ctrlTorque_r;
+
 
 void motorCtrlFn(){
      Ticker motorCtrlTicker;
@@ -125,34 +128,73 @@ void motorCtrlFn(){
      int count_iteration=0;
      
      static int32_t oldPosition;
+     static int32_t olderror_r;
      int32_t velocity = 0;
      //static int32_t velocity_Ctrl;
      
      while(1){
          motorCtrlT.signal_wait(0x1);
          int32_t newPosition=abs(motorPosition);
-         velocity=(newPosition-oldPosition)*10;
+         velocity=(newPosition-oldPosition)*10;    //position/sec
          oldPosition=newPosition;
          
          count_iteration= count_iteration+1;
         
          if(count_iteration ==10){
              putMessage(15, velocity);
-             putMessage(20, abs(newPosition));
+             putMessage(20, abs(newPosition/6.0f));
              count_iteration = 0;
          }
-         int32_t y_s = 25*(newVelocity*6.0f - abs(velocity));
+         int32_t y_s = 25*(newVelocity*6.0f - abs(velocity));    //rec/sec * 6 = position/sec
          
-         ctrlTorque = y_s;
+         ctrlTorque_s = y_s;
          
-         if(y_s<0){
-            newTorque = - ctrlTorque;   
-            lead = -2;
+         //if(y_s<0){
+         //   newTorque = - ctrlTorque_s;   
+         //   lead = -2;
+         //}
+         //else{
+         //   newTorque = ctrlTorque_s;
+         //   lead = 2;
+         //}
+         
+         int32_t error_r = ctrlPosition*6.0f - newPosition;
+         int32_t y_r = (int)( 25.0f * error_r + 245.0f * (error_r - olderror_r));
+         olderror_r = error_r;
+         
+         ctrlTorque_r = y_r;
+         //newTorque = pTorque;
+         
+         if(error_r>0){
+             ctrlTorque_s = ctrlTorque_s;
          }
+         else if(error_r==0){
+             ctrlTorque_s = 0;
+              }
          else{
-            newTorque = ctrlTorque;
-            lead = 2;
+             ctrlTorque_s = -ctrlTorque_s;
+         } 
+         
+         if(velocity<0){
+             if(ctrlTorque_s>ctrlTorque_r){
+               newTorque = ctrlTorque_s;
+             }
+             else{
+               newTorque = ctrlTorque_r; 
+             }
          }
+         
+         else{
+            if(ctrlTorque_s<ctrlTorque_r){
+              newTorque = ctrlTorque_s;   
+            } 
+            else{
+              newTorque = ctrlTorque_r;
+            }
+         }
+         
+         //error_r_int += error_r;
+
          
          
      }
@@ -200,7 +242,12 @@ void decodeFn(){
                                              sscanf(newCmd, "V%X", &newVelocity);   //Decode the command
                                              printf("The_Value_of_newVelocity_0x%016x\n\r", newVelocity);
 
-                                          }                                                
+                                          }              
+                                          if (newCmd[0] == 'P'){                    //communicate between threads using newkey
+                                             sscanf(newCmd, "P%X", &ctrlPosition);   //Decode the command
+                                             printf("The_Value_of_newVelocity_0x%016x\n\r", ctrlPosition);
+
+                                          }                                             
                                           
                                           
                                           char maxCmd[] = "T2000";
