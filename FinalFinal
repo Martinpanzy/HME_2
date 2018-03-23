@@ -3,8 +3,6 @@
 #include "rtos.h"
 
 
-
-
 //Photointerrupter input pins
 #define I1pin D2
 #define I2pin D11
@@ -194,14 +192,8 @@ void motorCtrlFn(){
             }
          }
          
-//        if (Torque_y < 0){
-//            newTorque = -Torque_y;
-//            lead = -2;
-//        } else {
-//            newTorque = Torque_y;
-//            lead = 2;
-//        }
-//        
+
+        
         //////change rotation direction according to +/- of R_Cmd
         if((int32_t)ctrlPosition<0){
             if (Torque_y < 0){
@@ -274,12 +266,7 @@ void decodeFn(){
                                              ctrlPosition = ctrlPosition+motorPosition/6; 
 
                                           }                                             
-                                          
-                                          
-//                                          char maxCmd[] = "T2000";
-//                                          if (newCmd[0] == 'V' && newCmd[1] == '0'){
-//                                             sscanf(maxCmd, "T%X", &newTorque);
-//                                          }                                            
+                                                                              
                                     }
                         }
                         
@@ -291,9 +278,6 @@ void decodeFn(){
                         }                         
             }
 }
-
-////  
-
 
 
 
@@ -424,9 +408,6 @@ int main() {
     I2.fall(&motorISR);
     I3.fall(&motorISR);
     
-    
-    
-    
     commOutT.start(commOutFn);       // start three threads
     ReadCom.start(decodeFn);
     motorCtrlT.start(motorCtrlFn);   
@@ -435,8 +416,5 @@ int main() {
    while(1) {   
           mining();
    }
-
-    
-   
 
 }
